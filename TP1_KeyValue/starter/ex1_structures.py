@@ -42,8 +42,8 @@ def get_cart(r, user_id):
     Récupérer tout le contenu du panier d'un utilisateur
     Retourner un dict {product_id: quantity}
     """
-    raw = r.hgetall(f"cart:{user_id}")
-    return {pid: int(qty) for pid, qty in raw.items()}
+    # Return raw strings — tests expect string values e.g. cart["1"] == "5"
+    return r.hgetall(f"cart:{user_id}")
 
 
 def record_view(r, user_id, product_id, max_history: int = 10):
