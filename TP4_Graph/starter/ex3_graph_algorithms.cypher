@@ -1,6 +1,7 @@
 // TP4 - Exercice 3 : Algorithmes de Graphe avec GDS
 // Prérequis : Plugin Graph Data Science installé (inclus dans docker-compose)
 
+
 // ─── 3.1 : Plus court chemin ──────────────────────────────────────────────────
 // "Comment Ahmed peut-il rencontrer Yasmina ?"
 MATCH p = shortestPath(
@@ -18,18 +19,18 @@ CALL gds.graph.project(
   'CONNAIT'
 );
 
-// TODO: Calculer et afficher le top 10 des étudiants les plus connectés
+// Top 10 étudiants les plus connectés
 CALL gds.degree.stream('reseau_social')
 YIELD nodeId, score
 RETURN gds.util.asNode(nodeId).prenom AS etudiant,
        gds.util.asNode(nodeId).universite AS universite,
        score AS nb_connexions
-ORDER BY score DESC
+ORDER BY nb_connexions DESC
 LIMIT 10;
 
 
 // ─── 3.3 : Détection de communautés (Louvain) ────────────────────────────────
-// TODO: Exécuter l'algorithme de Louvain et afficher les communautés
+// Exécuter Louvain
 CALL gds.louvain.stream('reseau_social')
 YIELD nodeId, communityId
 WITH communityId, collect(gds.util.asNode(nodeId).prenom) AS membres
@@ -40,14 +41,28 @@ ORDER BY taille DESC;
 
 
 // ─── 3.4 : Recommandation de contacts ────────────────────────────────────────
-// "Qui Ahmed devrait-il connaître ?" 
-// Critères : amis en commun + même cours + même filière
+// Score = amis communs * 3 + cours communs * 2 + même filière ? 1
 
-// TODO: Écrire la requête de recommandation
-// Score = nb_amis_communs * 3 + nb_cours_communs * 2 + (meme_filiere ? 1 : 0)
 MATCH (moi:Etudiant {prenom: "Ahmed"})
-// TODO: Compléter la requête
-RETURN ??? AS suggestion, ??? AS score
+MATCH (autre:Etudiant)
+WHERE moi <> autre
+AND NOT (moi)-[:CONNAIT]-(autre)
+
+// amis en commun
+OPTIONAL MATCH (moi)-[:CONNAIT]-(ami:Etudiant)-[:CONNAIT]-(autre)
+WITH moi, autre, count(DISTINCT ami) AS amis_communs
+
+// cours communs
+OPTIONAL MATCH (moi)-[:SUIT]->(c:Cours)<-[:SUIT]-(autre)
+WITH moi, autre, amis_communs, count(DISTINCT c) AS cours_communs
+
+// même filière
+WITH moi, autre, amis_communs, cours_communs,
+     CASE WHEN moi.filiere = autre.filiere THEN 1 ELSE 0 END AS meme_filiere
+
+WITH autre,
+     (amis_communs * 3 + cours_communs * 2 + meme_filiere) AS score
+RETURN autre.prenom AS suggestion, score
 ORDER BY score DESC
 LIMIT 5;
 
@@ -55,8 +70,11 @@ LIMIT 5;
 // ─── 3.5 : Chemin de compétences ─────────────────────────────────────────────
 // "Quels cours mènent à Machine Learning ?"
 MATCH path = (debut:Cours)-[:REQUIERT*]->(but:Competence {nom: "Machine Learning"})
-RETURN [n IN nodes(path) | 
-  CASE WHEN n:Cours THEN n.intitule ELSE n.nom END
+RETURN [n IN nodes(path) |
+  CASE
+    WHEN n:Cours THEN n.intitule
+    ELSE n.nom
+  END
 ] AS parcours_apprentissage;
 
 
